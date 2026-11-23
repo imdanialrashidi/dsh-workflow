@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 INSTALL="$ROOT/scripts/install.sh"
 INIT_PROJECT="$ROOT/scripts/init-project.sh"
-SKILLS=(quick-fix spec build verify review test-design)
+SKILLS=(quick-fix spec build verify review test-design production)
 
 CHECKS=0
 FAILURES=0
@@ -134,6 +134,7 @@ for file in \
   AGENTS.md \
   global/AGENTS.md \
   docs/WORKFLOW.md \
+  docs/RESEARCH.md \
   docs/DSH-CAPABILITY-MAP.md \
   docs/QUALITY-POLICY.md \
   docs/REVIEW-POLICY.md \
@@ -146,6 +147,9 @@ for file in \
   scripts/install.sh \
   scripts/init-project.sh \
   scripts/check.sh \
+  scripts/write-files.bash \
+  tests/dsh-load.mjs \
+  tests/dsh-session.mjs \
   .github/workflows/quality.yml; do
   require_file "$file"
 done
@@ -159,6 +163,7 @@ for file in \
   AGENTS.md \
   global/AGENTS.md \
   docs/WORKFLOW.md \
+  docs/RESEARCH.md \
   docs/DSH-CAPABILITY-MAP.md \
   docs/QUALITY-POLICY.md \
   docs/REVIEW-POLICY.md \
@@ -200,6 +205,12 @@ for script in "$INSTALL" "$INIT_PROJECT" "$ROOT/scripts/check.sh"; do
   fi
 done
 
+if bash -n "$ROOT/scripts/write-files.bash"; then
+  ok "shared write functions syntax"
+else
+  fail "invalid shared write functions"
+fi
+
 section "Documentation consistency"
 for skill in "${SKILLS[@]}"; do
   for doc in README.md global/AGENTS.md docs/WORKFLOW.md; do
@@ -211,7 +222,7 @@ for skill in "${SKILLS[@]}"; do
   done
 done
 
-for doc in docs/WORKFLOW.md docs/DSH-CAPABILITY-MAP.md docs/QUALITY-POLICY.md docs/REVIEW-POLICY.md docs/SECURITY.md; do
+for doc in docs/RESEARCH.md docs/WORKFLOW.md docs/DSH-CAPABILITY-MAP.md docs/QUALITY-POLICY.md docs/REVIEW-POLICY.md docs/SECURITY.md; do
   if grep -q -- "$(basename "$doc")" "$ROOT/README.md"; then
     ok "README links $doc"
   else
@@ -219,7 +230,7 @@ for doc in docs/WORKFLOW.md docs/DSH-CAPABILITY-MAP.md docs/QUALITY-POLICY.md do
   fi
 done
 
-if grep -q 'runtime-unverified' "$ROOT/docs/DSH-CAPABILITY-MAP.md"; then
+if grep -q '^## Research limitations$' "$ROOT/docs/DSH-CAPABILITY-MAP.md"; then
   ok "capability map marks unverified runtime behavior"
 else
   fail "capability map does not mark unverified runtime behavior"
@@ -237,10 +248,36 @@ if grep -Eq 'uses:[[:space:]]+actions/checkout@[0-9a-f]{40}' "$WORKFLOW"; then
 else
   fail "CI does not pin actions/checkout to a full SHA"
 fi
-if grep -Eq '^[[:space:]]*contents:[[:space:]]*read[[:space:]]*$' "$WORKFLOW"; then
-  ok "CI repository permission is read-only"
+if awk '/^[[:space:]]*(-[[:space:]]*)?uses:/ && $0 !~ /@[0-9a-f]+([[:space:]]|$)/ { exit 1 }
+  /^[[:space:]]*(-[[:space:]]*)?uses:/ { ref=$0; sub(/^.*@/, "", ref); sub(/[[:space:]].*$/, "", ref); if (length(ref) != 40) exit 1 }' "$WORKFLOW"; then
+  ok "all referenced CI actions use full commit SHAs"
 else
-  fail "CI does not declare contents: read"
+  fail "CI contains an unpinned action"
+fi
+if grep -Eq '^[[:space:]]+persist-credentials:[[:space:]]+false[[:space:]]*$' "$WORKFLOW"; then
+  ok "checkout credential persistence is disabled"
+else
+  fail "missing explicit checkout credential policy"
+fi
+# Check the small, block-style permissions declaration used by this workflow.
+if awk '
+  /^[[:space:]]*permissions:/ {
+    count++
+    if ($0 !~ /^permissions:[[:space:]]*$/) invalid=1
+    in_block=1
+    next
+  }
+  in_block && /^[[:space:]]*($|#)/ { next }
+  in_block && /^[^[:space:]]/ { in_block=0 }
+  in_block {
+    if ($0 ~ /^[[:space:]]+contents:[[:space:]]+read[[:space:]]*$/) reads++
+    else invalid=1
+  }
+  END { exit !(count == 1 && reads == 1 && !invalid) }
+' "$WORKFLOW"; then
+  ok "CI grants only read access to repository contents"
+else
+  fail "CI permissions exceed or omit the expected read-only policy"
 fi
 if grep -q 'pull_request_target' "$WORKFLOW"; then
   fail "CI uses pull_request_target"
@@ -315,7 +352,7 @@ else
 fi
 
 for file in AGENTS.md skills/quick-fix/SKILL.md skills/spec/SKILL.md skills/build/SKILL.md \
-  skills/verify/SKILL.md skills/review/SKILL.md skills/test-design/SKILL.md; do
+  skills/verify/SKILL.md skills/review/SKILL.md skills/test-design/SKILL.md skills/production/SKILL.md; do
   if [ -f "$ISO_DSH/$file" ]; then
     ok "installed $file"
   else
@@ -389,7 +426,10 @@ if grep -q 'conflict-marker' "$ISO_DSH/skills/review/SKILL.md"; then
 else
   ok "forced installation replaced the file"
 fi
-BACKUP="$(find "$ISO_DSH/skills/review" -maxdepth 1 -name 'SKILL.md.bak.*' -print -quit)"
+BACKUP=""
+for candidate in "$ISO_DSH/skills/review"/SKILL.md.bak.*; do
+  if [ -f "$candidate" ]; then BACKUP="$candidate"; break; fi
+done
 if [ -n "$BACKUP" ] && grep -q 'conflict-marker' "$BACKUP"; then
   ok "forced installation created a backup"
 else
@@ -540,6 +580,78 @@ if bash "$INIT_PROJECT" "$TMP_ROOT/does-not-exist" >/dev/null 2>&1; then
   fail "project initializer accepted a missing target"
 else
   ok "project initializer rejects a missing target"
+fi
+
+section "Target boundaries and writer coordination"
+
+# Validate a rejected configuration in isolation, including the exit class.
+reject_target() {
+  local label="$1" result=0
+  shift
+  "$@" >"$TMP_ROOT/reject.out" 2>&1 || result=$?
+  if [ "$result" -eq 2 ]; then ok "$label"; else fail "$label (exit $result)"; fi
+}
+
+reject_target "installer rejects a root alias in dry run" bash "$INSTALL" --dsh-home /. --dry-run
+reject_target "initializer rejects a root alias in dry run" bash "$INIT_PROJECT" --dry-run /.
+reject_target "initializer rejects a second target after --" bash "$INIT_PROJECT" "$PROJECT" -- "$PROJECT"
+reject_target "file with trailing separators is an invalid home" bash "$INSTALL" --dsh-home "$EXTERNAL_TARGET///" --dry-run
+
+for layout in skills skills/review; do
+  managed="$TMP_ROOT/linked-$layout"
+  fixture="$TMP_ROOT/fixture-$layout"
+  mkdir -p "${managed}/$(dirname "$layout")" "$fixture"
+  ln -s "$fixture" "$managed/$layout"
+  reject_target "installer refuses linked $layout before writing" bash "$INSTALL" --dsh-home "$managed" --force
+  if [ ! -e "$managed/AGENTS.md" ] && [ -z "$(ls -A "$fixture")" ]; then
+    ok "linked $layout preflight preserves both trees"
+  else
+    fail "linked $layout preflight wrote files"
+  fi
+done
+
+linked_project="$TMP_ROOT/linked-project"
+mkdir -p "$linked_project" "$TMP_ROOT/shared-docs"
+ln -s "$TMP_ROOT/shared-docs" "$linked_project/docs"
+reject_target "initializer refuses a linked docs directory" bash "$INIT_PROJECT" "$linked_project"
+if [ ! -e "$linked_project/AGENTS.md" ] && [ -z "$(ls -A "$TMP_ROOT/shared-docs")" ]; then
+  ok "initializer validates the document directory before writing"
+else
+  fail "initializer changed a rejected project"
+fi
+
+aliased="$TMP_ROOT/home alias"
+real_directory="$TMP_ROOT/physical home"
+mkdir -p "$real_directory"
+ln -s "$real_directory" "$aliased"
+if bash "$INSTALL" --dsh-home "$aliased" >/dev/null && cmp -s "$real_directory/AGENTS.md" "$ROOT/global/AGENTS.md"; then
+  ok "an explicitly selected home alias resolves to its physical directory"
+else
+  fail "explicit home alias installation"
+fi
+newline_project="$TMP_ROOT/target"$'\n'
+mkdir -p "$newline_project" "$TMP_ROOT/target"
+if bash "$INIT_PROJECT" "$newline_project" >/dev/null && [ -f "$newline_project/AGENTS.md" ] \
+  && bash "$INSTALL" --dsh-home "$newline_project/new home" >/dev/null \
+  && [ -f "$newline_project/new home/AGENTS.md" ] && [ -z "$(ls -A "$TMP_ROOT/target")" ]; then
+  ok "target names ending in a newline stay distinct from sibling names"
+else
+  fail "directory spelling changed during target resolution"
+fi
+
+locked="$TMP_ROOT/locked"
+mkdir -p "$locked/.dsh-workflow-write.lock"
+reject_target "installer respects an active root lock" bash "$INSTALL" --dsh-home "$locked"
+reject_target "initializer respects an active root lock" bash "$INIT_PROJECT" "$locked"
+if [ -d "$locked/.dsh-workflow-write.lock" ] && [ ! -e "$locked/AGENTS.md" ]; then
+  ok "blocked writers preserve the other writer's lock and target"
+else
+  fail "blocked writer changed a locked target"
+fi
+if [ ! -e "$real_directory/.dsh-workflow-write.lock" ] && [ ! -e "$PROJECT/.dsh-workflow-write.lock" ]; then
+  ok "successful writes release their locks"
+else
+  fail "a successful writer left a lock"
 fi
 
 printf '\n'

@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Create the agreed DSH Workflow project documents without overwriting anything.
 set -euo pipefail
+unset CDPATH
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="${SCRIPT_DIR%/*}"
+source "$SCRIPT_DIR/write-files.bash"
 TEMPLATES="$REPO_ROOT/templates/project"
 
 DRY_RUN=0
@@ -47,7 +49,7 @@ while [ "$#" -gt 0 ]; do
       ;;
     --)
       shift
-      [ "$#" -eq 1 ] || die "-- expects exactly one target directory"
+      [ "$TARGET_SET" -eq 0 ] && [ "$#" -eq 1 ] || die "-- expects exactly one target directory"
       TARGET_SET=1
       TARGET_ARG="$1"
       shift
@@ -71,11 +73,17 @@ done
 
 [ -d "$TARGET_ARG" ] || die "target does not exist or is not a directory: $TARGET_ARG"
 
-TARGET="$(cd "$TARGET_ARG" && pwd -P)"
+case "$TARGET_ARG" in
+  /*) ;;
+  *) TARGET_ARG="./$TARGET_ARG" ;;
+esac
+TARGET="$(cd -P -- "$TARGET_ARG" && printf '%s.' "$PWD")" || die "cannot resolve $TARGET_ARG"
+TARGET="${TARGET%.}"
+[ ! "$TARGET" -ef / ] || die "refusing to initialize the filesystem root"
 [ -d "$TARGET" ] || die "cannot resolve target directory: $TARGET_ARG"
 
-if [ -e "$TARGET/docs" ] && [ ! -d "$TARGET/docs" ]; then
-  die "docs exists but is not a directory: $TARGET/docs"
+if [ -L "$TARGET/docs" ] || { [ -e "$TARGET/docs" ] && [ ! -d "$TARGET/docs" ]; }; then
+  die "docs must be a directory inside the selected project: $TARGET/docs"
 fi
 
 for src in \
@@ -93,7 +101,7 @@ PRESERVED=0
 copy_if_missing() {
   src="$1"
   dest="$2"
-  parent="$(dirname "$dest")"
+  parent="${dest%/*}"
 
   if [ -e "$dest" ] || [ -L "$dest" ]; then
     PRESERVED=$((PRESERVED + 1))
@@ -111,8 +119,8 @@ copy_if_missing() {
     return 0
   fi
 
-  mkdir -p "$parent" || die "could not create directory: $parent"
-  cp -p "$src" "$dest" || die "could not create $dest"
+  stage_file "$src" "$dest"
+  publish_new "$dest"
   CREATED=$((CREATED + 1))
   printf 'created %s\n' "$dest"
 }
@@ -125,6 +133,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
   printf 'Dry run: no files will be changed.\n\n'
 fi
 
+if [ "$DRY_RUN" -eq 0 ]; then begin_write "$TARGET"; fi
 copy_if_missing "$TEMPLATES/AGENTS.md" "$TARGET/AGENTS.md"
 copy_if_missing "$TEMPLATES/docs/PRODUCT.md" "$TARGET/docs/PRODUCT.md"
 copy_if_missing "$TEMPLATES/docs/ARCHITECTURE.md" "$TARGET/docs/ARCHITECTURE.md"

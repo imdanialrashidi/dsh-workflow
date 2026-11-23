@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Install the DSH Workflow global instructions and skills.
 set -euo pipefail
+unset CDPATH
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="${SCRIPT_DIR%/*}"
+source "$SCRIPT_DIR/write-files.bash"
 
-SKILLS=(quick-fix spec build verify review test-design)
+SKILLS=(quick-fix spec build verify review test-design production)
 
 DRY_RUN=0
 FORCE=0
@@ -96,21 +98,47 @@ esac
 
 case "$DSH_ROOT" in
   /*) ;;
-  *) DSH_ROOT="$(pwd)/$DSH_ROOT" ;;
+  *) DSH_ROOT="$PWD/$DSH_ROOT" ;;
 esac
 
-# Reject the filesystem root and normalize one trailing separator.
-[ "$DSH_ROOT" != "/" ] || die "refusing to install into /"
-DSH_ROOT="${DSH_ROOT%/}"
-[ -n "$DSH_ROOT" ] || die "invalid DSH home"
-[ "$DSH_ROOT" != "/" ] || die "refusing to install into /"
+# Resolve the existing ancestor before creating any missing directories. This
+# also lets an explicitly selected home be a symlink to a user-owned directory.
+root_ancestor="$DSH_ROOT"
+missing_suffix=""
+while [ ! -d "$root_ancestor" ]; do
+  case "$root_ancestor" in
+    */) root_ancestor="${root_ancestor%/}"; continue ;;
+  esac
+  if [ -e "$root_ancestor" ] || [ -L "$root_ancestor" ]; then
+    die "DSH home component is not a directory: $root_ancestor"
+  fi
+  component="${root_ancestor##*/}"
+  case "$component" in
+    ..) die "cannot resolve .. through a missing directory: $DSH_ROOT" ;;
+    .|"") ;;
+    *) missing_suffix="/$component$missing_suffix" ;;
+  esac
+  root_ancestor="${root_ancestor%/*}"
+  root_ancestor="${root_ancestor:-/}"
+done
+# A marker preserves trailing newlines in valid Unix directory names.
+physical_root="$(cd -P -- "$root_ancestor" && printf '%s.' "$PWD")" || die "cannot resolve $root_ancestor"
+DSH_ROOT="${physical_root%.}$missing_suffix"
+if [ "$DSH_ROOT" -ef / ]; then
+  die "refusing to install into the filesystem root"
+fi
 
-if [ -e "$DSH_ROOT" ] && [ ! -d "$DSH_ROOT" ]; then
-  die "DSH home exists but is not a directory: $DSH_ROOT"
-fi
-if [ -e "$DSH_ROOT/skills" ] && [ ! -d "$DSH_ROOT/skills" ]; then
-  die "skills path exists but is not a directory: $DSH_ROOT/skills"
-fi
+# Only the selected home may be an alias. Validate all managed parent paths
+# before writing the global file, including in dry-run and force modes.
+check_managed_directory() {
+  if [ -L "$1" ] || { [ -e "$1" ] && [ ! -d "$1" ]; }; then
+    die "managed path must be a directory inside the selected home: $1"
+  fi
+}
+check_managed_directory "$DSH_ROOT/skills"
+for skill in "${SKILLS[@]}"; do
+  check_managed_directory "$DSH_ROOT/skills/$skill"
+done
 
 GLOBAL_SRC="$REPO_ROOT/global/AGENTS.md"
 [ -f "$GLOBAL_SRC" ] || die "missing source file: $GLOBAL_SRC"
@@ -125,22 +153,16 @@ CONFLICTS=0
 PLANNED=0
 
 backup_file() {
-  BACKUP_PATH="$1.bak.$(date +%Y%m%d%H%M%S)"
-  suffix=1
-  while [ -e "$BACKUP_PATH" ] || [ -L "$BACKUP_PATH" ]; do
-    BACKUP_PATH="$1.bak.$(date +%Y%m%d%H%M%S).$suffix"
-    suffix=$((suffix + 1))
-  done
-  if cp -pP "$1" "$BACKUP_PATH" 2>/dev/null; then
-    return 0
+  BACKUP_PATH="$(mktemp "$1.bak.$(date +%Y%m%d%H%M%S).XXXXXX")" || return 1
+  if ! cp -fpP "$1" "$BACKUP_PATH"; then
+    rm -f "$BACKUP_PATH"
+    return 1
   fi
-  cp -p "$1" "$BACKUP_PATH"
 }
 
 install_file() {
-  src="$1"
-  dest="$2"
-  parent="$(dirname "$dest")"
+  local src="$1" dest="$2" parent replace=0
+  parent="${dest%/*}"
 
   if [ -e "$parent" ] && [ ! -d "$parent" ]; then
     CONFLICTS=$((CONFLICTS + 1))
@@ -149,7 +171,7 @@ install_file() {
   fi
 
   if [ -L "$dest" ] || [ -f "$dest" ]; then
-    if cmp -s "$src" "$dest"; then
+    if [ ! -L "$dest" ] && cmp -s "$src" "$dest"; then
       UNCHANGED=$((UNCHANGED + 1))
       printf 'unchanged %s\n' "$dest"
       return 0
@@ -167,10 +189,7 @@ install_file() {
       return 0
     fi
 
-    backup_file "$dest" || die "could not back up $dest"
-    rm -f "$dest" || die "could not replace $dest"
-    BACKED_UP=$((BACKED_UP + 1))
-    printf 'backed up %s -> %s\n' "$dest" "$BACKUP_PATH"
+    replace=1
   elif [ -e "$dest" ] || [ -L "$dest" ]; then
     CONFLICTS=$((CONFLICTS + 1))
     printf 'CONFLICT %s: exists and is not a regular file; not touched\n' "$dest" >&2
@@ -183,13 +202,26 @@ install_file() {
     return 0
   fi
 
-  mkdir -p "$parent" || die "could not create directory: $parent"
-  cp -p "$src" "$dest" || die "could not install $dest"
+  stage_file "$src" "$dest"
+  if [ "$replace" -eq 1 ]; then
+    backup_file "$dest" || die "could not back up $dest"
+    BACKED_UP=$((BACKED_UP + 1))
+    printf 'backed up %s -> %s\n' "$dest" "$BACKUP_PATH"
+    # A link to a directory can otherwise be treated as a directory by mv.
+    if [ -L "$dest" ]; then
+      rm -f "$dest" || die "could not replace the link at $dest"
+    fi
+    mv -f "$stage" "$dest" || die "could not replace $dest (backup: $BACKUP_PATH)"
+  else
+    publish_new "$dest"
+  fi
+  stage=""
   INSTALLED=$((INSTALLED + 1))
   printf 'installed %s\n' "$dest"
 }
 
-printf 'DSH Workflow v0.1\n'
+
+printf 'DSH Workflow v0.2\n'
 printf 'Source: %s\n' "$REPO_ROOT"
 printf 'Target: %s\n\n' "$DSH_ROOT"
 
@@ -197,6 +229,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
   printf 'Dry run: no files will be changed.\n\n'
 fi
 
+if [ "$DRY_RUN" -eq 0 ]; then begin_write "$DSH_ROOT"; fi
 install_file "$GLOBAL_SRC" "$DSH_ROOT/AGENTS.md"
 for skill in "${SKILLS[@]}"; do
   install_file "$REPO_ROOT/skills/$skill/SKILL.md" "$DSH_ROOT/skills/$skill/SKILL.md"
@@ -222,4 +255,4 @@ if [ "$CONFLICTS" -gt 0 ]; then
 fi
 
 printf '\nStart a new DSH session to pick up the global instructions.\n'
-printf 'Use /quick-fix, /spec, /build, /verify, /review, or /test-design as needed.\n'
+printf 'Use /quick-fix, /spec, /build, /verify, /review, /test-design, or /production as needed.\n'

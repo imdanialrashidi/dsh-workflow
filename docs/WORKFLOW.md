@@ -22,9 +22,12 @@ DSH Workflow is a small instruction and skill pack for coding work in DeepSeek H
 | Normal feature | Brief acceptance criteria → implement → verify → review | Criteria mapped to checks; diff self-review | Optional |
 | Complex change | Inspect dependencies and architecture → concise plan → implement in bounded steps → verify each stage → review | Staged evidence; integration or contract checks where relevant | Recommended |
 | High-risk change | Spec → implement with negative-path tests → verify → security review → independent review | Negative paths, failure/rollback evidence, security review | Required when a reviewer is available |
+| Production readiness or hardening | Identify candidate and workload → select applicable gates → exercise failure and recovery → hand off to release owner | Evidence for required gates, rollout stop condition, recovery method and accountable owner | Follow the project’s release review policy |
 | Existing change review | Inspect the actual diff and context → review only | Findings with scenarios; no edits during review | Optional second reviewer |
 
 Risk is set by the change, not by the author's confidence. A small diff in authentication, billing, migrations, CI, installers, or data deletion is still high risk.
+
+Use [the production skill](../skills/production/SKILL.md) for a launch, an operational readiness assessment or an explicit hardening request. It can run on an existing release candidate. Routine development continues to use the paths below.
 
 ### Small and low risk
 
@@ -64,7 +67,7 @@ A short entry point plus focused documents beats a giant instruction file. The p
 
 | Document | Owns |
 | --- | --- |
-| `AGENTS.md` | Standing instructions, commands, boundaries, and links to deeper documents |
+| `AGENTS.md` | Non-obvious project rules, ownership, boundaries and links to deeper documents |
 | `docs/PRODUCT.md` | Problem, users, outcomes, non-goals, and success signals |
 | `docs/ARCHITECTURE.md` | System map, components, boundaries, invariants, and failure modes |
 | `docs/DESIGN.md` | Interfaces, states, error behavior, compatibility, and design decisions |
@@ -82,10 +85,12 @@ Subagents are optional. Use one when the work is genuinely independent, such as 
 
 ## Workflow completion
 
-A change is ready to report when:
+A handoff should communicate the following, including when work is incomplete:
 
 - every acceptance criterion is met or explicitly reported as unmet;
 - the actual checks have been run and their statuses are recorded;
 - the diff has been reviewed and actionable findings are resolved or explicitly accepted;
 - documentation owned by the change is updated;
-- no known blocker is hidden behind a success summary.
+- the verification verdict follows the [quality policy](QUALITY-POLICY.md) and the review verdict follows the [review policy](REVIEW-POLICY.md).
+
+For a high-risk delivery, also record the exact candidate, the owner's release decision, the first signal of harm and the recovery path. Record an unavailable review or staging check explicitly. A required gap keeps the handoff blocked. For a localized fix, a check result and a diff review usually suffice.

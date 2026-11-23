@@ -99,4 +99,6 @@ Accepted risk belongs to the user or owner, with the reason recorded. Silence or
 
 The reviewer reports scope, evidence reviewed, findings by severity, independent-review status, validation status, residual risks, and a verdict: ready, changes required, or blocked. Findings must be actionable without reading a transcript.
 
+A failed requirement or open blocker/major defect yields **changes required**. With no demonstrated failure, missing mandatory verification or a pending required review yields **blocked**. Use **ready** when the agreed scope is verified and remaining risks have a recorded disposition. Identify the actual reviewer, the snapshot reviewed and any outstanding human release approval. Readiness does not execute a release.
+
 The operational procedure is in [the review skill](../skills/review/SKILL.md). The evidence standard for fixes is in [QUALITY-POLICY.md](QUALITY-POLICY.md).

@@ -8,6 +8,7 @@ This repository is a DSH instruction and skill pack. It is not a plugin, daemon,
 | --- | --- |
 | Purpose, installation, usage, troubleshooting | [README.md](README.md) |
 | Execution model and skill selection | [docs/WORKFLOW.md](docs/WORKFLOW.md) |
+| Research evidence and project evaluation | [docs/RESEARCH.md](docs/RESEARCH.md) |
 | Verified DSH behavior and limitations | [docs/DSH-CAPABILITY-MAP.md](docs/DSH-CAPABILITY-MAP.md) |
 | Evidence and test standards | [docs/QUALITY-POLICY.md](docs/QUALITY-POLICY.md) |
 | Review rules and repair limits | [docs/REVIEW-POLICY.md](docs/REVIEW-POLICY.md) |
@@ -49,6 +50,6 @@ bash scripts/init-project.sh "$tmp/project"
 
 ## Compatibility
 
-- Verified against DSH `0.2.1-rc.2`. DSH is a developer preview, so re-check instructions and skill discovery before claiming support for another version.
+- Loader and provider paths tested against DSH `0.2.1-rc.2` and `0.2.2-rc.5` on Linux. DSH is a developer preview, so re-check instructions and skill discovery before claiming support for another version.
 - When a DSH capability or path changes, update [docs/DSH-CAPABILITY-MAP.md](docs/DSH-CAPABILITY-MAP.md) with evidence and a confidence status. Do not document an unverified feature as supported.
 - Keep GitHub Actions pinned to full commit SHAs and least-privilege permissions.
