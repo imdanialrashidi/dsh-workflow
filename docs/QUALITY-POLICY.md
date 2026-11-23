@@ -81,11 +81,13 @@ Verification and review are different activities. Verification executes checks; 
 
 A change is complete when:
 
-- acceptance criteria are met or explicitly reported as unmet;
+- every agreed acceptance criterion is met with current evidence on the candidate;
 - every planned check has a status and the evidence is available;
 - actionable review findings are fixed, or accepted with a recorded owner and reason;
 - documentation owned by the change is current;
 - residual risks and unexecuted checks are reported.
+
+A required failed check or criterion yields **fail**. If none failed and evidence for any requirement is absent, use **incomplete**. A **pass** requires evidence for every required check and criterion. A successful suite with no matching cases leaves the relevant criterion unexecuted. Record the reviewed revision and local modifications, and rerun affected checks if the candidate changes. Record suite totals or the matching case when selection matters. A risk owner may change scope explicitly. Keep the original result and record the new decision.
 
 Do not describe incomplete work as complete, and do not use "should work", "likely fixed", or "tests pass" without the command and result.
 

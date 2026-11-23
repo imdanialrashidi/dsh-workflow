@@ -12,8 +12,16 @@ permissions:
 
 jobs:
   workflow-checks:
-    name: Workflow checks
-    runs-on: ubuntu-latest
+    name: ${{ matrix.check_name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            check_name: Workflow checks
+          - os: macos-latest
+            check_name: macOS workflow checks
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     steps:
       - name: Check out repository

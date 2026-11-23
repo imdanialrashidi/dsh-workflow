@@ -1,6 +1,6 @@
 # DSH Workflow
 
-A small, repository-independent coding workflow for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness). Version 0.1 provides global instructions, six DSH skills, project documentation templates, a safe installer, and self-checks.
+A small, repository-independent coding workflow for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness). Version 0.2 ships seven skills, project templates, a conflict-aware installer and executable checks. It ties each delivery decision to evidence from the reviewed change.
 
 It is not a plugin, daemon, MCP server, or custom multi-agent framework. It uses DSH's instruction loading, skill discovery, native tools, permissions, and optional subagents.
 
@@ -19,7 +19,7 @@ See [docs/WORKFLOW.md](docs/WORKFLOW.md) for the execution model and [docs/DSH-C
 
 ## Verified DSH integration
 
-The workflow targets DSH `0.2.1-rc.2`. DSH is a developer preview, so re-verify before relying on another version.
+The seven installed skills and global/project instruction loading were tested on Linux with DSH `0.2.1-rc.2` and `0.2.2-rc.5`, including explicit `/verify` and `/production` injection in headless sessions. The [capability map](docs/DSH-CAPABILITY-MAP.md) distinguishes these checks from session and model behavior.
 
 | Mechanism | Location/behavior |
 | --- | --- |
@@ -27,15 +27,15 @@ The workflow targets DSH `0.2.1-rc.2`. DSH is a developer preview, so re-verify 
 | User skills | `$DSH_HOME/skills/<name>/SKILL.md` |
 | Project instructions | `AGENTS.md` from the project root down to the working directory |
 | Model skill access | DSH's `skill` tool and injected skill catalog |
-| Explicit user invocation | `/quick-fix`, `/spec`, `/build`, `/verify`, `/review`, `/test-design` |
+| Explicit user invocation | `/quick-fix`, `/spec`, `/build`, `/verify`, `/review`, `/test-design`, `/production` |
 
 The `/name` form is DSH's user-invocable skill gesture. This repository does not generate slash-command files. See the capability map for evidence and for behavior that remains runtime-unverified.
 
 ## Prerequisites
 
-- **DSH** installed and runnable (`npx @deepseek-ai/dsh web`, or another supported profile). Verified against `0.2.1-rc.2`.
+- **DSH** installed from an approved source and pinned to the version your team qualified. Start its Web profile with the installed CLI (`dsh web`).
 - **Node.js**, as required by your DSH installation.
-- **Bash 3.2 or newer**, Git, and standard Unix tools (`cp`, `cmp`, `find`, `grep`, `sed`, `awk`, `mktemp`).
+- **Bash 3.2 or newer**, Git, and standard Linux or macOS tools (`mv` with no-clobber support, `cp`, `cmp`, `find`, `grep`, `sed`, `awk`, `mktemp`).
 - **Linux or macOS.** Windows is not supported by the shell scripts; WSL and Git Bash are unverified.
 - No project dependencies are added by the workflow.
 
@@ -67,6 +67,7 @@ $DSH_HOME/skills/build/SKILL.md
 $DSH_HOME/skills/verify/SKILL.md
 $DSH_HOME/skills/review/SKILL.md
 $DSH_HOME/skills/test-design/SKILL.md
+$DSH_HOME/skills/production/SKILL.md
 ```
 
 It does not modify profiles, `cordis.patch.yml`, credentials, sessions, storages, or project files. It never uses `sudo`, downloads code, or runs a network command.
@@ -75,8 +76,10 @@ It does not modify profiles, `cordis.patch.yml`, credentials, sessions, storages
 
 - An identical file is left unchanged.
 - A differing file is **not** overwritten by default. The installer reports the conflict and exits nonzero, after installing non-conflicting files.
-- `--force` replaces a conflicting file only after creating a timestamped backup next to it, such as `SKILL.md.bak.20261025184500`.
+- `--force` replaces a conflicting file only after creating a timestamped backup next to it, such as `SKILL.md.bak.20261122120000.a8K2fB`.
 - `--dry-run` reports planned actions and conflicts without creating or changing anything.
+
+A real run stages files beside their destinations and holds a temporary directory lock shared by both scripts. An occupied lock returns an error before any managed file is written. Dry runs create no lock. The explicitly selected root may be a directory alias. Managed child directories must be real directories. A destination file symlink is always a conflict, even if its target has identical contents. Forced replacement backs up the link itself. Use a target owned by the installing user.
 
 Review a conflict before forcing replacement. The file may contain your own global instructions or a customized skill.
 
@@ -92,17 +95,7 @@ If a file changed upstream and locally, the default install reports a conflict a
 
 ## Removal
 
-Remove only the files this workflow installed. Do not delete the whole skills directory, because it may contain your own skills.
-
-```sh
-DSH_HOME="${DSH_HOME:-$HOME/.dsh}"
-rm -f "$DSH_HOME/AGENTS.md"
-for skill in quick-fix spec build verify review test-design; do
-  rm -rf "$DSH_HOME/skills/$skill"
-done
-```
-
-If `--force` replaced a pre-existing `AGENTS.md`, restore your backup from the same directory. Start a new DSH session after removal.
+Use the installation summary to identify the global file and the seven `skills/<name>/SKILL.md` files that this pack created. Inspect each path before removal. An identical pre-existing file may have been reported as unchanged. Keep pre-existing and customized files, sibling resources and backups. For a file explicitly replaced with `--force`, restore the intended backup after inspecting it. Remove an empty skill directory with `rmdir` if appropriate. Start a new DSH session afterward.
 
 ## Initialize a project
 
@@ -123,7 +116,7 @@ docs/DESIGN.md
 docs/QUALITY.md
 ```
 
-Existing files are never overwritten, and there is no force mode. Fill the placeholders with real project information, remove sections that do not apply, and keep the files short enough that an agent can use them.
+Existing files are preserved. The initializer checks the physical project root and requires a real project-local `docs` directory when it already exists. Existing projects can merge the new quality and handoff sections into their owning documents manually. Fill the placeholders with real project information, remove sections that do not apply, and keep the files short enough that an agent can use them.
 
 The project template's `AGENTS.md` points to the other documents; DSH automatically loads the `AGENTS.md`/`CLAUDE.md` instruction chain, not arbitrary files under `docs/`. Do not assume other documents are injected automatically.
 
@@ -138,6 +131,7 @@ DSH injects the available skills into the session and uses their descriptions to
 /verify
 /review
 /test-design The export must handle empty results and a 50 MB stream.
+/production Assess the export worker for release. Check tenant isolation, duplicate delivery and recovery after restart.
 ```
 
 If you prefer natural language, describe the task. The model should load the matching skill when its description applies.
@@ -150,6 +144,7 @@ If you prefer natural language, describe the task. The model should load the mat
 | `verify` | Validation is needed | Executed checks with passed/failed/blocked/unproven/unexecuted statuses |
 | `review` | A diff needs defect review | Evidence-backed findings and a bounded repair loop |
 | `test-design` | Coverage or failure modes need designing | Focused tests with meaningful failure detection |
+| [`production`](skills/production/SKILL.md) | Prepare a project for production or assess a candidate for release | Evidence-backed readiness verdict, blocking risks, operator and recovery procedure |
 
 A typical normal feature:
 
@@ -161,13 +156,20 @@ A typical normal feature:
 
 For high-risk changes, add negative-path tests, a security review, and independent review with a fresh-context DSH subagent when available. Subagents are optional. See [docs/REVIEW-POLICY.md](docs/REVIEW-POLICY.md) and [docs/QUALITY-POLICY.md](docs/QUALITY-POLICY.md).
 
+## Example delivery decision
+
+Suppose a customer requests a tenant-filtered export. In `/spec`, agree that an authorized user receives only their tenant’s records and that a denied request creates no file or queued job. In `/build`, use synthetic tenants and exercise the actual export handler. In `/verify`, tie each criterion to its observed result on the candidate. If the worker integration is required and unavailable, report **incomplete** even if the API tests passed. In `/review`, trace the worker's authorization, examine the test changes and record the independent reviewer or the missing review. The release owner receives the revision, CI evidence, rollout signal and recovery procedure. A local typo fix can still finish in `/quick-fix` with one targeted check.
+
+The [research and pilot guide](docs/RESEARCH.md) maps the design to primary sources and gives a paired evaluation for your own projects.
+
 ## Architecture
 
 ```text
 README.md                     Purpose, install/update/remove, usage
 AGENTS.md                     Development rules for this repository
 global/AGENTS.md              Short instructions installed as $DSH_HOME/AGENTS.md
-skills/                       Six runtime procedures, each with one SKILL.md
+skills/                       Seven runtime procedures, each with one SKILL.md
+docs/RESEARCH.md              Research findings, design decisions and paired pilot
 docs/WORKFLOW.md              Decision model and phase transitions
 docs/DSH-CAPABILITY-MAP.md    Verified DSH capabilities and limitations
 docs/QUALITY-POLICY.md        Evidence, acceptance, and test standards
@@ -177,10 +179,11 @@ templates/project/            Project AGENTS.md and docs scaffolds
 scripts/install.sh            Idempotent, conflict-aware global installer
 scripts/init-project.sh       Non-destructive project initializer
 scripts/check.sh              Self-validation and isolated script tests
+tests/dsh-load.mjs            Optional check against an installed DSH runtime
 .github/workflows/quality.yml Minimal CI: checkout and scripts/check.sh
 ```
 
-The installed footprint is intentionally limited to one global instruction file and six skill files. The repository documentation is for maintainers and users; it is not copied into every project.
+The installed footprint is intentionally limited to one global instruction file and seven skill files. The repository documentation is for maintainers and users; it is not copied into every project.
 
 ## Verifying this repository
 
@@ -194,12 +197,20 @@ The check validates:
 - skill frontmatter, kebab-case names, allowed keys, non-empty bodies, and one-file bundle layout;
 - shell syntax and executable bits;
 - cross-document skill references;
-- the CI workflow's pinned checkout SHA, read-only permission, and no secrets;
+- the CI workflow's pinned action references, explicit checkout credential policy, read-only permissions and absence of repository secret references;
 - installer help, dry run, installation, idempotence, conflict handling, backups, symlink safety, path override, empty-path rejection, and root-path rejection;
 - project initializer dry run, non-destructive output, repeatability, and missing-target rejection;
 - that isolated test runs do not modify seeded credentials or profile files.
 
-CI runs the same script on Ubuntu. It is intentionally minimal and uses no secrets. The check is not a substitute for project-level verification: it does not build an arbitrary repository, start DSH with a model, or exercise a project's tests. Project-level verification must discover those commands from the project itself.
+Run the optional DSH compatibility check against an installation that already contains the DSH npm packages. It loads both instruction files and all seven skill bodies in a temporary home, then starts separate headless sessions. A loopback responder checks the outgoing catalog and the complete `/verify` and `/production` bodies and returns a fixed response. The test uses a synthetic project, a fixture key and no external model.
+
+```sh
+node tests/dsh-load.mjs /path/to/directory-containing-node_modules
+```
+
+To practice applying the production verdicts against executable evidence, run `python3 tests/production-cases.py` with Python 3.7+ and its standard SQLite module. It replays a synthetic charge in fresh processes and performs an isolated restore. The output records observations for a reviewer. The [calibration notes](docs/RESEARCH.md#executed-ledger-exercise) give the expected decisions and scope.
+
+CI is configured to run the shell checks on Ubuntu and macOS. It is intentionally minimal and uses no secrets. The check is not a substitute for project-level verification: it does not build an arbitrary repository, start DSH with a model, or exercise a project's tests. Project-level verification must discover those commands from the project itself.
 
 ## Troubleshooting
 
@@ -209,6 +220,7 @@ CI runs the same script on Ubuntu. It is intentionally minimal and uses no secre
 | `/name` is treated as plain text | The name must be user-invocable (default) and exist in the current workspace catalog. Check the skill root and name. |
 | Global instructions are not applied | Confirm the file is at `$DSH_HOME/AGENTS.md` and DSH is using the same `$DSH_HOME`. Start a new session; global instructions are not watched continuously. |
 | Installer reports a conflict | Your file differs. Review it, merge manually, or use `--force` and restore from the generated backup if needed. |
+| Writer lock exists | Wait for the process using this target. After a crash, confirm that no installer or initializer is active on the target, then remove only the empty `.dsh-workflow-write.lock` with `rmdir` and retry. |
 | Installer refuses the target | The path is the filesystem root, empty, or not a directory. Use a real `$DSH_HOME` path. |
 | Project initializer skips a file | The file already exists. It is preserved by design; merge the template manually if appropriate. |
 | `bash: ...` syntax errors | The scripts require Bash 3.2 or newer. On Windows, use WSL; native Windows is unsupported. |
@@ -232,14 +244,16 @@ See [docs/SECURITY.md](docs/SECURITY.md). The workflow does not grant approvals,
 
 ## Status and limitations
 
-- Version 0.1, verified against DSH `0.2.1-rc.2` on Linux.
+- Version 0.2. Linux loader/provider checks cover `0.2.1-rc.2` and `0.2.2-rc.5`. Profile-specific observations remain scoped to the version in the capability map.
 - DSH is a developer preview; skill paths, defaults, and tool names can change.
-- The DSH instruction paths, skill format, and precedence were verified from source, official documentation, live configuration, and direct calls to the installed loader and skill-provider APIs. No isolated model session was run, so the model-facing catalog message and `/name` injection remain runtime-unverified.
+- Both versions delivered the installed instructions, skill catalog and explicitly invoked `/verify` and `/production` bodies to a loopback provider in the headless profile. Autonomous skill selection and decision quality on real projects remain unmeasured.
 - The GitHub Actions workflow was validated locally and by content checks, not by a GitHub-hosted run.
 - macOS, WSL, and Windows behavior are unverified.
-- The workflow improves discipline; it does not guarantee correctness, security, or review completeness.
+- Project acceptance rates, review effort and production outcomes require measurement on representative tasks. The research guide includes a protocol and example graders.
 
 ## Research and references
+
+Start with the [evidence review and project pilot](docs/RESEARCH.md) for dated sources, limitations and implementation choices.
 
 - DSH repository and documentation: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)
 - Anthropic, [How the Claude Code team does code review](https://claude.dev/blog/solving-code-review-at-anthropic/)
