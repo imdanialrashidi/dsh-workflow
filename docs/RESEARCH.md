@@ -54,7 +54,7 @@ The optional DSH integration test passed against `0.2.1-rc.2` and `0.2.2-rc.5` o
 
 The global entry point fell from 3,406 to 2,281 bytes, and the initialized project entry point from 2,748 to 1,404 bytes. These are UTF-8 file sizes. Inference cost, defects after release and time saved remain measurements for the paired pilot.
 
-An independent code review covered the installer, initializer and verdict rules. The final Linux checks included competing writers and preservation of a symlink backup. Hosted CI and macOS execution remain open until the owning repository runs its workflow.
+An independent code review covered the installer, initializer and verdict rules. The final Linux checks included competing writers and preservation of a symlink backup. Hosted CI was pending at this stage. On 2026-11-23, after the production skill was added, the Ubuntu and macOS jobs each reported 188 checks and zero failures. [GitHub Actions run 45136810552](https://github.com/imdanialrashidi/dsh-workflow/actions/runs/45136810552)
 
 ## Evidence behind the production skill
 

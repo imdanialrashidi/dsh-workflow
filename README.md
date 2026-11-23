@@ -247,8 +247,8 @@ See [docs/SECURITY.md](docs/SECURITY.md). The workflow does not grant approvals,
 - Version 0.2. Linux loader/provider checks cover `0.2.1-rc.2` and `0.2.2-rc.5`. Profile-specific observations remain scoped to the version in the capability map.
 - DSH is a developer preview; skill paths, defaults, and tool names can change.
 - Both versions delivered the installed instructions, skill catalog and explicitly invoked `/verify` and `/production` bodies to a loopback provider in the headless profile. Autonomous skill selection and decision quality on real projects remain unmeasured.
-- The GitHub Actions workflow was validated locally and by content checks, not by a GitHub-hosted run.
-- macOS, WSL, and Windows behavior are unverified.
+- On 2026-11-23, the hosted Ubuntu and macOS jobs each passed all 188 repository checks. DSH headless integration was exercised separately on Linux. [GitHub Actions run 45136810552](https://github.com/imdanialrashidi/dsh-workflow/actions/runs/45136810552)
+- WSL and Windows behavior remain unverified.
 - Project acceptance rates, review effort and production outcomes require measurement on representative tasks. The research guide includes a protocol and example graders.
 
 ## Research and references

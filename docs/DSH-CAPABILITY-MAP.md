@@ -12,7 +12,7 @@ On 2026-11-22 the official npm `latest` tag resolved to `0.2.2-rc.5`. The newer 
 | Global and initialized project instructions in order | Passed | Passed | Real baseline loader rendered both complete files without truncation or omission. |
 | Headless model-facing catalog and direct `/verify` and `/production` instruction injection | Passed | Passed | Separate headless CLI sessions sent both instruction layers, the catalog and their complete invoked skill to a loopback responder and returned its fixed answer. |
 | Model chooses a skill, interprets a verdict or honors a denial | Unproven | Unproven | The responder returns a fixed text reply. It exercises transport and instruction delivery without inference. |
-| Hosted CI, customer deployments and production outcomes | Unexecuted | Unexecuted | Check at the owning repository or release environment. |
+| Customer deployments and production outcomes | Unexecuted | Unexecuted | Assess these in the owning release environment. |
 
 Reproduce with `node tests/dsh-load.mjs /path/to/directory-containing-node_modules`. The arguments point to the installation under test. The script creates its own temporary project and DSH home and reads no user credentials. Version-specific profile defaults and tools in the table below come from the October survey unless explicitly retested.
 
@@ -75,7 +75,7 @@ The October checks covered the package APIs. The November headless test above ex
 
 - The loopback session verifies transport and explicit skill injection. Model judgment, autonomous skill selection and the other UI profiles remain unverified by that test.
 - The OpenAI article's canonical URL returned HTTP 403. The text used for this research came from `https://r.jina.ai/https://openai.com/index/harness-engineering/`, a third-party text mirror. No claim in this repository depends on an unverified detail from it.
-- The GitHub Actions workflow was validated by repository checks and YAML review, not by a GitHub-hosted run.
-- Only Linux was tested. macOS Bash behavior and Windows are not verified.
+- On 2026-11-23, GitHub-hosted Ubuntu and macOS runners each passed the 188 repository checks, including installer and initializer behavior. [GitHub Actions run 45136810552](https://github.com/imdanialrashidi/dsh-workflow/actions/runs/45136810552)
+- The DSH loader and headless session checks ran on Linux. DSH model behavior on macOS and Windows remains unverified.
 - DSH's developer-preview status means paths, defaults, and tool names can change. The capability map must be updated with evidence when they do.
 - OMP conventions, Claude Code slash-command files, and other harness-specific mechanisms were not assumed or tested. The only invocation mechanisms documented here are DSH's skill catalog, `skill` tool, and `/name` user gesture.
